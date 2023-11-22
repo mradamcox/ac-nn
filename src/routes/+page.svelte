@@ -29,7 +29,7 @@
 
     import Point from 'ol/geom/Point.js';
     import {fromLonLat, toLonLat} from 'ol/proj.js';
-    import {extend} from 'ol/extent';
+    import {containsCoordinate, extend} from 'ol/extent';
 
     let showStudioList = false;
     let showSponsorList = false;
@@ -74,6 +74,53 @@
         },
         zIndex: 2,
     });
+
+    
+    const config = {}
+    function getConfig() {
+        const url = apiUrl + spreadsheetId + "/values/Config?key=" + googleApiKey
+        return fetch(url)
+            .then(response => response.json())
+            .then(result => {
+                result.values.forEach( function (row) {
+                    config[row[0]] = row[1]
+                });
+            })
+            .catch(error => {
+                console.error("hmmmmm, what's wrong??:", error);
+            })
+        }
+    getConfig()
+        
+    const layerLookup = {}
+    async function getLayerList() {
+        const url = apiUrl + spreadsheetId + "/values/LayerList?key=" + googleApiKey
+        return fetch(url)
+            .then(response => response.json())
+            .then(result => {
+                const headers = result.values.shift();
+                console.log(headers)
+                result.values.forEach( function (row) {
+                    layerLookup[row[0]] = {
+                        id: row[0],
+                        displayName: row[1],
+                        visible: false,
+                        layer: new VectorLayer({
+                            source: new VectorSource(),
+                        }),
+                        featureList: [],
+                    }
+                })
+                console.log(layerLookup)
+            })
+            .catch(error => {
+                console.error("hmmmmm, what's wrong??:", error);
+            })
+    }
+
+    async function makeLayers() {
+
+    }
 
     const sponsorList = [];
     const studioList = [];
@@ -234,8 +281,10 @@
             ],
             overlays: [popupStudio, popupSponsor]
         });
-        await addSheetDataToLayer("2023-sponsors", sponsorLayer, sponsorList);
-        await addSheetDataToLayer("2023-studios", studioLayer, studioList);
+        await getLayerList();
+        await makeLayers();
+        // await addSheetDataToLayer("2023-sponsors", sponsorLayer, sponsorList);
+        // await addSheetDataToLayer("2023-studios", studioLayer, studioList);
         const fullExtent = studioLayer.getSource().getExtent();
         extend(fullExtent, sponsorLayer.getSource().getExtent())
         map.getView().fit(fullExtent, {padding: [50,50,50,50]});
@@ -310,10 +359,8 @@
 {#if showAboutPanel}
 <div class="about-modal-bg">
     <div class="about-modal-content">
-        <h1>Welcome!</h1>
-        <p>The Winding Roads Art Tour, with headquarters in Viroqua, Wisconsin, is an invitation to meet with artists in their studios. Treat yourself to a weekend of creativity and inspiration on this self-guided tour through the beauty of the Driftless landscape.</p>
-        <p>As you wind your way through the springtime rolling hills you will discover a diversity of artistic expression, meeting artists in their homes and creative workplaces along the way. Take this opportunity to view and purchase artwork with an understanding of the people, process and story behind its creation.</p>
-        <h3><em>Thank you to our sponsors!</em></h3>
+        <h1>{config.infoBoxHeader}</h1>
+        <p>{@html config.infoBoxContent}</p>
         <button on:click={() => {showAboutPanel=false}}>close</button>
     </div>
 </div>
@@ -323,12 +370,10 @@
     <div id="layer-panel">
         <div class="logo-header">
             <h1 hidden=true>Winding Roads Art Tour</h1>
-            <a href="http://www.windingroadsart.com" title="Winding Roads Art Tour - Home">
-                <img class="logo-img" src="/logo_green23.png" alt="Winding Roads Art Tour logo"/>
-            </a>        
+            <img class="logo-img" src="/image.png" alt="ac+nn"/>   
         </div>
         <div class="layer-section" style="margin-bottom: 15px;">
-            <button on:click={() => {showAboutPanel=true}}>Learn more about the tour...</button>
+            <button on:click={() => {showAboutPanel=true}}>{config.infoBoxLabel ? config.infoBoxLabel : 'loading...'}</button>
         </div>
         <div>
             <!-- <p>Basemap testing
@@ -338,7 +383,23 @@
             </p> -->
         </div>
         <div class="panel-content">
+            {#each Object.entries(layerLookup) as [layerId, layerDef]}
             <div class=layer-section>
+                <div><button class="layer-header" on:click={() => {layerDef.visible=!layerDef.visible}}>{layerDef.displayName} {@html layerDef.visible ? '&blacktriangledown;' : '&blacktriangleright;'}</button></div>
+                {#if layerDef.visible}
+                <div class="layer-item-list">
+                    <ul>
+                        {#each layerDef.featureList as f}
+                        <li>
+                            <button class="zoom-to" on:click={() => {zoomAndPopup(f, 16)}}><strong>{f.Number} &ndash;</strong> {f.Name}</button>
+                        </li>
+                        {/each}
+                    </ul>
+                </div>
+                {/if}
+            </div>
+            {/each}
+            <!-- <div class=layer-section>
                 <div><button class="layer-header" on:click={() => {showStudioList=!showStudioList}}>Tour Stops {@html showStudioList ? '&blacktriangledown;' : '&blacktriangleright;'}</button></div>
                 {#if showStudioList}
                 <div class="layer-item-list">
@@ -368,7 +429,7 @@
                     </ul>
                 </div>
                 {/if}
-            </div>
+            </div> -->
         </div>
     </div>
     {/if}
@@ -415,7 +476,7 @@
         width: 250px;
         max-width: 100%;
         max-height: 100vh;
-        background: white;
+        background-color: #feecd2;
         border-right: 1px solid #597544;
         align-items: center;
         z-index: 999;
@@ -452,8 +513,8 @@
 
     .panel-content button.layer-header {
         border: none;
-        background: #597544;
-        color: white;
+        background: #494583;
+        color: #feecd2;
         font-size: 1.25em;
         width: 100%;
         padding: 5px;
@@ -479,7 +540,7 @@
     }
     .about-modal-content {
         position: absolute;
-        background: white;
+        background: #feecd2;
         border-radius: 4px;
         top: 3em;
         right: 0;
@@ -493,7 +554,7 @@
         align-items: center;
         text-align: center;
         border-radius: 4px;
-        border: 1px solid #597544;
+        border: 2px solid #379fe1;
     }
 
     .about-modal-content p {
