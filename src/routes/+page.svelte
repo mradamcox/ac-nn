@@ -19,14 +19,16 @@
         Icon,
     } from 'ol/style.js';
 
+    
     import Stamen from 'ol/source/Stamen.js';
     import XYZ from 'ol/source/XYZ';
     import VectorSource from 'ol/source/Vector';
-
+    
     import TileLayer from 'ol/layer/Tile';
     import VectorLayer from 'ol/layer/Vector';
     import LayerGroup from 'ol/layer/Group';
-
+    
+    import WKT from 'ol/format/WKT';
     import Point from 'ol/geom/Point.js';
     import {fromLonLat, toLonLat} from 'ol/proj.js';
     import {containsCoordinate, extend} from 'ol/extent';
@@ -99,16 +101,18 @@
             .then(response => response.json())
             .then(result => {
                 const headers = result.values.shift();
-                console.log(headers)
                 result.values.forEach( function (row) {
-                    layerLookup[row[0]] = {
-                        id: row[0],
-                        displayName: row[1],
-                        visible: false,
-                        layer: new VectorLayer({
-                            source: new VectorSource(),
-                        }),
-                        featureList: [],
+                    const [id, displayName, active] = row
+                    if (id && active === "TRUE") {
+                        layerLookup[id] = {
+                            id: id,
+                            displayName: displayName,
+                            visible: false,
+                            layer: new VectorLayer({
+                                source: new VectorSource(),
+                            }),
+                            featureList: [],
+                        }
                     }
                 })
                 console.log(layerLookup)
@@ -119,7 +123,30 @@
     }
 
     async function makeLayers() {
-
+        Object.keys(layerLookup).forEach ( function (layerId) {
+            console.log(layerId)
+            console.log(layerLookup[layerId])
+            const url = apiUrl + spreadsheetId + "/values/" + layerId + "?key=" + googleApiKey
+            return fetch(url)
+                .then(response => response.json())
+                .then(result => {
+                    const headers = result.values.shift();
+                    console.log(headers)
+                    result.values.forEach( function (row) {
+                        console.log(row)
+                        const wkt = new WKT();
+                        const feature = wkt.readFeature(row[0], {
+                            dataProjection: 'EPSG:4326',
+                            featureProjection: 'EPSG:3857',
+                        })
+                        layerLookup[layerId].layer.getSource().addFeature(feature)
+                    })
+                    console.log(layerLookup)
+                })
+                .catch(error => {
+                    console.error("hmmmmm, what's wrong??:", error);
+                })
+        })
     }
 
     const sponsorList = [];
@@ -208,7 +235,7 @@
         watercolorLabels,
         stamenTerrain,
     ]
-    function setBasemap(layerId) {
+    function setBasemap(map, layerId) {
         basemaps.forEach( function (layerDef) {
             if (layerDef.id == layerId){
                 map.addLayer(layerDef.layer)
@@ -276,18 +303,27 @@
             target: document.getElementById('map'),
             layers: [
                 basemaps[0].layer,
-                sponsorLayer,
-                studioLayer,
+                // sponsorLayer,
+                // studioLayer,
             ],
-            overlays: [popupStudio, popupSponsor]
+            view: new View({
+                center: fromLonLat([-90.092583,29.980209]),
+                // center: transform([-90.092583,29.980209], 'EPSG:4326', 'EPSG:3857');,
+                zoom: 16,
+            }),
         });
+        // setBasemap(map, 'mbOutdoors')
         await getLayerList();
         await makeLayers();
+
+        Object.keys(layerLookup).forEach( function (layerId) {
+            map.addLayer(layerLookup[layerId].layer)
+        })
         // await addSheetDataToLayer("2023-sponsors", sponsorLayer, sponsorList);
         // await addSheetDataToLayer("2023-studios", studioLayer, studioList);
-        const fullExtent = studioLayer.getSource().getExtent();
-        extend(fullExtent, sponsorLayer.getSource().getExtent())
-        map.getView().fit(fullExtent, {padding: [50,50,50,50]});
+        // const fullExtent = layerLookup['saturday'].layer.getSource().getExtent();
+        // extend(fullExtent, sponsorLayer.getSource().getExtent())
+        // map.getView().fit(fullExtent, {padding: [50,50,50,50]});
         // change mouse cursor when over marker
         map.on('pointermove', function (e) {
             const pixel = map.getEventPixel(e.originalEvent);
@@ -307,6 +343,7 @@
             const lon = Number.parseFloat(toLonLat(evt.coordinate)[0]).toFixed(6);
             const lat = Number.parseFloat(toLonLat(evt.coordinate)[1]).toFixed(6);
             console.log(`${lon},${lat}`);
+            console.log(`zoom: ${map.getView().getZoom()}`);
         });
         return map
     }
@@ -350,8 +387,6 @@
             }
         });
         await initMap()
-        showStudioList = true;
-        showSponsorList = true;
         mapEl = document.getElementById("map");
     });
 
@@ -477,7 +512,7 @@
         max-width: 100%;
         max-height: 100vh;
         background-color: #feecd2;
-        border-right: 1px solid #597544;
+        border-right: 2px solid #494583;
         align-items: center;
         z-index: 999;
         overflow-y:scroll;
@@ -554,7 +589,7 @@
         align-items: center;
         text-align: center;
         border-radius: 4px;
-        border: 2px solid #379fe1;
+        border: 2px solid #494583;
     }
 
     .about-modal-content p {
