@@ -87,43 +87,6 @@
             })
         }
     }
-
-    const sponsorStyle = new Style({
-        image: new RegularShape({
-            fill: new Fill({
-                color: '#ff5a34',
-            }),
-            stroke: new Stroke({
-                color: 'rgba(50, 50, 50, 0.8)',
-                width: 2,
-            }),
-            points: 5,
-            radius: 12,
-            radius2: 6,
-            angle: 0,
-        }),
-    })
-    let sponsorLayer = new VectorLayer({
-        source: new VectorSource(),
-        style: sponsorStyle,
-        zIndex: 1,
-    });
-    let studioLayer = new VectorLayer({
-        source: new VectorSource(),
-        style: function (feature) {
-            return new Style({
-                image: new Icon({
-                    anchor: [0.5, 46],
-                    anchorXUnits: 'fraction',
-                    anchorYUnits: 'pixels',
-                    src: '/icons/stop-icon-' + feature.get('Number') + '.png',
-                    scale: .28,
-                }),
-            })
-        },
-        zIndex: 2,
-    });
-
     
     const config = {}
     function getConfig() {
@@ -304,27 +267,6 @@
         }
     }
 
-    function handleSponsorPopup (featureProps) {
-        const latLonStr = `${featureProps.Coordinates.split(",")[1]},${featureProps.Coordinates.split(",")[0]}`
-        let popContent = `<h2>${featureProps.Name}</h2>
-        <p><em>${featureProps.Address}</em></p>
-        <p>${featureProps['Popup Description']}</p>`
-        popContent = popContent + `<p><a href="https://www.google.com/maps/dir//${latLonStr}/" target="_blank">get directions &rarr;</a></p>`
-        popupSponsor.show(fromLonLat(featureProps.Coordinates.split(",")), popContent);
-    }
-    function handleStudioPopup (featureProps) {
-        let artistList = ""
-        featureProps.Artists.split(";").forEach( function (artist) {
-            artistList = artistList + `<li>${artist}</li>`
-        })
-        const latLonStr = `${featureProps.Coordinates.split(",")[1]},${featureProps.Coordinates.split(",")[0]}`
-        let popContent = `<h2>${featureProps.Name}</h2>
-            <p><em>${featureProps.Address}</em></p>
-            <p>Artist(s) at this studio:</p>
-            <ul>${artistList}</ul>`
-        popContent = popContent + `<p><a href="https://www.google.com/maps/dir//${latLonStr}/" target="_blank">get directions &rarr;</a></p>`
-        popupStudio.show(fromLonLat(featureProps.Coordinates.split(",")), popContent);
-    }
     function handlePopup (featureProps) {
         let popContent = `<h2>${featureProps.name}</h2>`
         if (featureProps.imgUrl) { popContent+= `<img src=${featureProps.imgUrl} style="width:100%" />`}
@@ -340,8 +282,6 @@
     }
 
     let map;
-    let popupSponsor;
-    let popupStudio;
     let popup;
     async function initMap() {
         map = new Map({
@@ -363,8 +303,6 @@
         Object.keys(layerLookup).forEach( function (layerId) {
             map.addLayer(layerLookup[layerId].layer)
         })
-        // await addSheetDataToLayer("2023-sponsors", sponsorLayer, sponsorList);
-        // await addSheetDataToLayer("2023-studios", studioLayer, studioList);
         // const fullExtent = layerLookup['saturday'].layer.getSource().getExtent();
         // extend(fullExtent, sponsorLayer.getSource().getExtent())
         // map.getView().fit(fullExtent, {padding: [50,50,50,50]});
@@ -376,8 +314,6 @@
         });
         // display popup on click
         map.on('click', function (evt) {
-            popupSponsor.hide();
-            popupStudio.hide();
             popup.hide();
             const feature = map.forEachFeatureAtPixel(evt.pixel, function (feature) {
                 return feature;
@@ -413,26 +349,8 @@
         // Importing at the top of the file causes npm run build to fail with
         // a 'window is not defined' error.
         const Popup = (await import('ol-ext/overlay/Popup')).default;
-        popupSponsor = new Popup ({
-            popupClass: "shadow default", //"tooltips", "warning" "black" "default", "tips", "shadow",
-            closeBox: false,
-            autoPan: {
-                animation: {
-                    duration: 100
-                }
-            }
-        });
-        popupStudio = new Popup ({
-            popupClass: "shadow tips", //"tooltips", "warning" "black" "default", "tips", "shadow",
-            closeBox: false,
-            autoPan: {
-                animation: {
-                    duration: 100
-                }
-            }
-        });
         popup = new Popup ({
-            popupClass: "shadow tips", //"tooltips", "warning" "black" "default", "tips", "shadow",
+            popupClass: "shadow", //"tooltips", "warning" "black" "default", "tips", "shadow",
             closeBox: false,
             autoPan: {
                 animation: {
@@ -477,13 +395,12 @@
             <div class=layer-section>
                 <div><button class="layer-header" on:click={() => {layerDef.isVisible=!layerDef.isVisible}}>{layerDef.displayName} {@html layerDef.isVisible ? '&blacktriangledown;' : '&blacktriangleright;'}</button></div>
                 {#if layerDef.isVisible}
-                <p>{layerDef.description}</p>
+                <div class="layer-description">{layerDef.description}</div>
                 <div class="layer-item-list">
                     <ul>
                         {#each layerDef.featureList as f}
                         <li>
                             <button class="zoom-to" on:click={() => {zoomAndPopup(f)}}><strong>{f.name}</strong></button>
-                            <p>{f.desc}</p>
                         </li>
                         {/each}
                     </ul>
@@ -538,8 +455,8 @@
         width: 250px;
         max-width: 100%;
         max-height: 100vh;
-        background-color: #feecd2;
-        border-right: 2px solid #494583;
+        background-color: rgb(232, 222, 210);
+        border-right: 2px solid rgb(61, 64, 143);
         align-items: center;
         z-index: 999;
         overflow-y:scroll;
@@ -555,6 +472,10 @@
 
     .layer-section {
         margin-bottom: 5px;
+    }
+
+    .layer-description {
+        padding: 5px;
     }
 
     .layer-item-list {
@@ -575,8 +496,8 @@
 
     .panel-content button.layer-header {
         border: none;
-        background: #494583;
-        color: #feecd2;
+        background: rgb(61, 64, 143);
+        color: rgb(232, 222, 210);
         font-size: 1.25em;
         width: 100%;
         padding: 5px;
@@ -602,7 +523,7 @@
     }
     .about-modal-content {
         position: absolute;
-        background: #feecd2;
+        background: rgb(232, 222, 210);
         border-radius: 4px;
         top: 3em;
         right: 0;
@@ -627,9 +548,11 @@
         width: 100%;
     }
 
-    /* .ol-popup {
-        max-width: 350px;
-    } */
+    :global(.ol-popup ) {
+        background: rgb(232, 222, 210);
+        outline: 1px solid rgb(61, 64, 143);
+    }
+        
     /*
     .ol-popup:after, .ol-popup:before {
         top: 100%;
