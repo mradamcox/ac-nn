@@ -8,9 +8,10 @@
 
     import Map from 'ol/Map';
     import View from 'ol/View';
+    import {getCenter} from 'ol/extent';
     import Feature from 'ol/Feature';
     import {
-        Circle as CircleStyle,
+        Circle,
         Fill,
         RegularShape,
         Stroke,
@@ -33,13 +34,59 @@
     import {fromLonLat, toLonLat} from 'ol/proj.js';
     import {containsCoordinate, extend} from 'ol/extent';
 
-    let showStudioList = false;
-    let showSponsorList = false;
-
     const spreadsheetId = env.PUBLIC_GOOGLE_SHEET_ID;
     const googleApiKey = env.PUBLIC_GOOGLE_API_KEY;
 
     const apiUrl = 'https://sheets.googleapis.com/v4/spreadsheets/'
+
+    function getStyle(feature, resolution) {
+        const props = feature.getProperties()
+
+        const fill = new Fill({
+            color: 'rgba(255,255,255,0.4)',
+        });
+        const stroke = new Stroke({
+            color: '#3399CC',
+            width: 1.25,
+        });
+        console.log(props)
+        if (props.styleId === "redstar") {
+            return new Style({
+                image: new RegularShape({
+                    fill: new Fill({
+                        color: '#ff5a34',
+                    }),
+                    stroke: new Stroke({
+                        color: 'rgba(50, 50, 50, 0.8)',
+                        width: 2,
+                    }),
+                    points: 5,
+                    radius: 12,
+                    radius2: 6,
+                    angle: 0,
+                }),
+                text: new Text({
+                    text: props.name
+                })
+            })
+        } else if (props.styleId === "annotation") {
+            return new Style({
+                text: new Text({
+                    text: props.name
+                })
+            })
+        } else {
+            return new Style({
+                image: new Circle({
+                    fill: fill,
+                    stroke: stroke,
+                    radius: 5,
+                }),
+                fill: fill,
+                stroke: stroke,
+            })
+        }
+    }
 
     const sponsorStyle = new Style({
         image: new RegularShape({
@@ -102,79 +149,66 @@
             .then(result => {
                 const headers = result.values.shift();
                 result.values.forEach( function (row) {
-                    const [id, displayName, active] = row
-                    if (id && active === "TRUE") {
+                    const [id, name, desc, isActive, isVisible, isTogglable, isAnnotation, styleId] = row
+                    if (id && isActive === "TRUE") {
                         layerLookup[id] = {
                             id: id,
-                            displayName: displayName,
-                            visible: false,
+                            displayName: name,
+                            description: desc,
+                            isVisible: isVisible === "TRUE",
+                            isAnnotation: isAnnotation === "TRUE",
                             layer: new VectorLayer({
                                 source: new VectorSource(),
+                                style: getStyle,
                             }),
                             featureList: [],
+                            styleId: styleId,
                         }
+                        // if (styleId in styles) {
+                        //     layerLookup[id].layer.setStyle(styles[styleId])
+                        // }
                     }
                 })
-                console.log(layerLookup)
             })
             .catch(error => {
                 console.error("hmmmmm, what's wrong??:", error);
             })
     }
+    $: {
+        Object.keys(layerLookup).forEach( function (layerId) {
+            layerLookup[layerId].layer.setVisible(layerLookup[layerId].isVisible)
+        })
+    }
 
     async function makeLayers() {
         Object.keys(layerLookup).forEach ( function (layerId) {
-            console.log(layerId)
-            console.log(layerLookup[layerId])
             const url = apiUrl + spreadsheetId + "/values/" + layerId + "?key=" + googleApiKey
             return fetch(url)
                 .then(response => response.json())
                 .then(result => {
                     const headers = result.values.shift();
-                    console.log(headers)
                     result.values.forEach( function (row) {
-                        console.log(row)
-                        const wkt = new WKT();
-                        const feature = wkt.readFeature(row[0], {
+                        const [wkt, name, desc, imgUrl, styleId] = row
+                        const feature = new WKT().readFeature(wkt, {
                             dataProjection: 'EPSG:4326',
                             featureProjection: 'EPSG:3857',
                         })
+                        const props = {
+                            name:name,
+                            desc:desc,
+                            imgUrl:imgUrl,
+                            extent: feature.getGeometry().getExtent(),
+                            styleId: styleId ? styleId : layerLookup[layerId].styleId,
+                        }
+                        feature.setProperties(props)
                         layerLookup[layerId].layer.getSource().addFeature(feature)
+                        layerLookup[layerId].featureList.push(props)
                     })
-                    console.log(layerLookup)
                 })
                 .catch(error => {
                     console.error("hmmmmm, what's wrong??:", error);
                 })
         })
-    }
-
-    const sponsorList = [];
-    const studioList = [];
-    async function addSheetDataToLayer(sheetName, layer, featureList) {
-        const url = apiUrl + spreadsheetId + "/values/" + sheetName + "?key=" + googleApiKey
-        return fetch(url)
-            .then(response => response.json())
-            .then(result => {
-                const headers = result.values[0];
-                result.values.forEach( function(row, n) {
-                    if (n != 0) {
-                        const feature = new Feature({
-                            geometry: new Point(fromLonLat(row[headers.indexOf("Coordinates")].split(","))),
-                        })
-                        const properties = {};
-                        headers.forEach((k, i) => {properties[k] = row[i]})
-                        properties['source'] = sheetName;
-                        feature.setProperties(properties)
-                        
-                        layer.getSource().addFeature(feature)
-                        featureList.push(properties)
-                    }
-                })
-            })
-            .catch(error => {
-                console.error('hmmmmm:', error);
-            })
     }
 
     const mbk = env.PUBLIC_MAPBOX_TOKEN
@@ -250,19 +284,16 @@
     let layerBtnLabel;
     $: showLayerPanel ? layerBtnLabel = "×" : layerBtnLabel = "i"
 
-    function zoomAndPopup(featureProps, zoomLevel) {
+    function zoomAndPopup(featureProps) {
         if (map) {
-            if (zoomLevel > map.getView().getZoom()) {
-                map.getView().animate({
-                    center: fromLonLat(featureProps.Coordinates.split(",")),
-                    zoom: zoomLevel,
-                })
-            } else {
-                map.getView().animate({
-                    center: fromLonLat(featureProps.Coordinates.split(",")),
-                    // zoom: zoomLevel,
-                })
-            }
+            const resolution = map.getView().getResolutionForExtent(featureProps.extent);
+            const zoom = map.getView().getZoomForResolution(resolution) > 15 ? map.getView().getZoomForResolution(resolution) : 15;
+            const center = getCenter(featureProps.extent);
+            map.getView().animate({
+                center: center,
+                zoom: zoom,
+            })
+            handlePopup(featureProps)
             popupSponsor.hide();
             popupStudio.hide();
             if (featureProps.source == "2023-sponsors") {
@@ -294,23 +325,36 @@
         popContent = popContent + `<p><a href="https://www.google.com/maps/dir//${latLonStr}/" target="_blank">get directions &rarr;</a></p>`
         popupStudio.show(fromLonLat(featureProps.Coordinates.split(",")), popContent);
     }
+    function handlePopup (featureProps) {
+        let popContent = `<h2>${featureProps.name}</h2>`
+        if (featureProps.imgUrl) { popContent+= `<img src=${featureProps.imgUrl} style="width:100%" />`}
+        popContent+= `<p><em>${featureProps.desc}</em></p>`
+        const coords = getCenter(featureProps.extent)
+        console.log(coords)
+        const coords84 = toLonLat(coords)
+        const latLonStr = `${coords84[1]},${coords84[0]}`
+        popContent = popContent + `<p>
+            <em><a href="https://www.google.com/maps/dir//${latLonStr}/" target="_blank">get directions &rarr;</a>
+            </em></p>`
+        popup.show(coords, popContent);
+    }
 
     let map;
     let popupSponsor;
     let popupStudio;
+    let popup;
     async function initMap() {
         map = new Map({
             target: document.getElementById('map'),
             layers: [
                 basemaps[0].layer,
-                // sponsorLayer,
-                // studioLayer,
             ],
             view: new View({
                 center: fromLonLat([-90.092583,29.980209]),
                 // center: transform([-90.092583,29.980209], 'EPSG:4326', 'EPSG:3857');,
                 zoom: 16,
             }),
+            overlays: [popup]
         });
         // setBasemap(map, 'mbOutdoors')
         await getLayerList();
@@ -334,11 +378,12 @@
         map.on('click', function (evt) {
             popupSponsor.hide();
             popupStudio.hide();
+            popup.hide();
             const feature = map.forEachFeatureAtPixel(evt.pixel, function (feature) {
                 return feature;
             });
             if (feature) {
-                zoomAndPopup(feature.getProperties(), 14)
+                zoomAndPopup(feature.getProperties())
             }
             const lon = Number.parseFloat(toLonLat(evt.coordinate)[0]).toFixed(6);
             const lat = Number.parseFloat(toLonLat(evt.coordinate)[1]).toFixed(6);
@@ -386,6 +431,15 @@
                 }
             }
         });
+        popup = new Popup ({
+            popupClass: "shadow tips", //"tooltips", "warning" "black" "default", "tips", "shadow",
+            closeBox: false,
+            autoPan: {
+                animation: {
+                    duration: 100
+                }
+            }
+        });
         await initMap()
         mapEl = document.getElementById("map");
     });
@@ -404,7 +458,7 @@
     {#if showLayerPanel}
     <div id="layer-panel">
         <div class="logo-header">
-            <h1 hidden=true>Winding Roads Art Tour</h1>
+            <h1 hidden=true>AC / NN</h1>
             <img class="logo-img" src="/image.png" alt="ac+nn"/>   
         </div>
         <div class="layer-section" style="margin-bottom: 15px;">
@@ -419,52 +473,25 @@
         </div>
         <div class="panel-content">
             {#each Object.entries(layerLookup) as [layerId, layerDef]}
+            {#if layerDef.isAnnotation != true}
             <div class=layer-section>
-                <div><button class="layer-header" on:click={() => {layerDef.visible=!layerDef.visible}}>{layerDef.displayName} {@html layerDef.visible ? '&blacktriangledown;' : '&blacktriangleright;'}</button></div>
-                {#if layerDef.visible}
+                <div><button class="layer-header" on:click={() => {layerDef.isVisible=!layerDef.isVisible}}>{layerDef.displayName} {@html layerDef.isVisible ? '&blacktriangledown;' : '&blacktriangleright;'}</button></div>
+                {#if layerDef.isVisible}
+                <p>{layerDef.description}</p>
                 <div class="layer-item-list">
                     <ul>
                         {#each layerDef.featureList as f}
                         <li>
-                            <button class="zoom-to" on:click={() => {zoomAndPopup(f, 16)}}><strong>{f.Number} &ndash;</strong> {f.Name}</button>
+                            <button class="zoom-to" on:click={() => {zoomAndPopup(f)}}><strong>{f.name}</strong></button>
+                            <p>{f.desc}</p>
                         </li>
                         {/each}
                     </ul>
                 </div>
                 {/if}
             </div>
+            {/if}
             {/each}
-            <!-- <div class=layer-section>
-                <div><button class="layer-header" on:click={() => {showStudioList=!showStudioList}}>Tour Stops {@html showStudioList ? '&blacktriangledown;' : '&blacktriangleright;'}</button></div>
-                {#if showStudioList}
-                <div class="layer-item-list">
-                    <ul>
-                        {#each studioList as s}
-                        <li>
-                            <button class="zoom-to" on:click={() => {zoomAndPopup(s, 16)}}><strong>{s.Number} &ndash;</strong> {s.Name}</button>
-                        </li>
-                        {/each}
-                    </ul>
-                </div>
-                {/if}
-            </div>
-            <div class=layer-section>
-                <div><button class="layer-header" on:click={() => {showSponsorList=!showSponsorList}}>Visit our Sponsors! {@html showSponsorList ? '&blacktriangledown;' : '&blacktriangleright;'}</button></div>
-                {#if showSponsorList}
-                <div class="layer-item-list">
-                    <ul>
-                        {#each sponsorList as s}
-                        <li>
-                            <button class="zoom-to" on:click={() => {zoomAndPopup(s, 16)}}>
-                                {#if s.Food == 'Y'}<i class="fa fa-spoon" title="Food here"></i>{/if}
-                                {#if s.Lodging == 'Y'}<i class="fa fa-hotel" title="Lodging here"></i>{/if}
-                                {s.Name}</button>
-                        </li>
-                        {/each}
-                    </ul>
-                </div>
-                {/if}
-            </div> -->
         </div>
     </div>
     {/if}
