@@ -39,22 +39,30 @@
 
     const apiUrl = 'https://sheets.googleapis.com/v4/spreadsheets/'
 
+    let showAboutPanel = true;
+    let showLayerPanel = true;
+    let layerBtnLabel;
+    $: showLayerPanel ? layerBtnLabel = "×" : layerBtnLabel = "i"
+
     function getStyle(feature, resolution) {
         const props = feature.getProperties()
 
+        const mainRed = '#ff5a34';
+        const darkRed = 'rgb(123, 30, 39)'
+        const teal = 'rgb(16, 196, 162)'
         const fill = new Fill({
             color: 'rgba(255,255,255,0.4)',
         });
         const stroke = new Stroke({
-            color: '#3399CC',
-            width: 1.25,
+            color: teal,
+            width: 1.75,
         });
         console.log(props)
         if (props.styleId === "redstar") {
             return new Style({
                 image: new RegularShape({
                     fill: new Fill({
-                        color: '#ff5a34',
+                        color: mainRed,
                     }),
                     stroke: new Stroke({
                         color: 'rgba(50, 50, 50, 0.8)',
@@ -66,7 +74,13 @@
                     angle: 0,
                 }),
                 text: new Text({
-                    text: props.name
+                    text: props.name,
+                    offsetY: -20,
+                    font: "bold 20px sans-serif",
+                    stroke: new Stroke({
+                        color: "white",
+                        width: 2,
+                    }),
                 })
             })
         } else if (props.styleId === "annotation") {
@@ -74,6 +88,21 @@
                 text: new Text({
                     text: props.name
                 })
+            })
+        } else if (props.styleId === "reddashline") {
+            return new Style({
+                stroke: new Stroke({
+                    color: mainRed,
+                    width: 3,
+                    lineDash: [4,8]
+                }),
+            })
+        } else if (props.styleId === "ccc") {
+            return new Style({
+                stroke: new Stroke({
+                    color: darkRed,
+                    width: 2,
+                }),
             })
         } else {
             return new Style({
@@ -112,7 +141,7 @@
             .then(result => {
                 const headers = result.values.shift();
                 result.values.forEach( function (row) {
-                    const [id, name, desc, isActive, isVisible, isTogglable, isAnnotation, styleId] = row
+                    const [id, name, desc, isActive, isVisible, isTogglable, isAnnotation, styleId, zIndex] = row
                     if (id && isActive === "TRUE") {
                         layerLookup[id] = {
                             id: id,
@@ -123,6 +152,7 @@
                             layer: new VectorLayer({
                                 source: new VectorSource(),
                                 style: getStyle,
+                                zIndex: zIndex ? zIndex : 10,
                             }),
                             featureList: [],
                             styleId: styleId,
@@ -139,7 +169,9 @@
     }
     $: {
         Object.keys(layerLookup).forEach( function (layerId) {
-            layerLookup[layerId].layer.setVisible(layerLookup[layerId].isVisible)
+            if (layerLookup[layerId].isTogglable) {
+                layerLookup[layerId].layer.setVisible(layerLookup[layerId].isVisible)
+            }
         })
     }
 
@@ -242,11 +274,6 @@
         })
     }
 
-    let showAboutPanel = false;
-    let showLayerPanel = true;
-    let layerBtnLabel;
-    $: showLayerPanel ? layerBtnLabel = "×" : layerBtnLabel = "i"
-
     function zoomAndPopup(featureProps) {
         if (map) {
             const resolution = map.getView().getResolutionForExtent(featureProps.extent);
@@ -257,13 +284,6 @@
                 zoom: zoom,
             })
             handlePopup(featureProps)
-            popupSponsor.hide();
-            popupStudio.hide();
-            if (featureProps.source == "2023-sponsors") {
-                handleSponsorPopup(featureProps)
-            } else if (featureProps.source == "2023-studios") {
-                handleStudioPopup(featureProps)
-            }
         }
     }
 
@@ -323,7 +343,7 @@
             }
             const lon = Number.parseFloat(toLonLat(evt.coordinate)[0]).toFixed(6);
             const lat = Number.parseFloat(toLonLat(evt.coordinate)[1]).toFixed(6);
-            console.log(`${lon},${lat}`);
+            console.log(`POINT (${lon} ${lat})`);
             console.log(`zoom: ${map.getView().getZoom()}`);
         });
         return map
@@ -366,8 +386,8 @@
 {#if showAboutPanel}
 <div class="about-modal-bg">
     <div class="about-modal-content">
-        <h1>{config.infoBoxHeader}</h1>
-        <p>{@html config.infoBoxContent}</p>
+        <h1>{config.infoBoxHeader ? config.infoBoxHeader : '...'}</h1>
+        <p>{@html config.infoBoxContent ? config.infoBoxContent : '...'}</p>
         <button on:click={() => {showAboutPanel=false}}>close</button>
     </div>
 </div>
