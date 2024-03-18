@@ -456,7 +456,8 @@
             <div class=layer-section>
                 <div class="layer-header">
                     <button class="zoom-to-layer" on:click={() => {zoomToLayer(layerLookup['friday'].layer)}}>{layerLookup['friday'].displayName}</button>
-                    <button on:click={() => {openModal(layerLookup['friday'].displayName, layerLookup['friday'].description)}}>INFO</button>
+                    <button on:click={() => {zoomToLayer(layerLookup['friday'].layer)}}>ZOOM</button>
+                    <button on:click={() => {openModal(layerLookup['friday'].displayName, layerLookup['friday'].description)}}>MORE INFO</button>
                 </div>
                 {#if layerLookup['friday'].isVisible}
                 <div class="layer-item-list">
@@ -475,7 +476,8 @@
             <div class=layer-section>
                 <div class="layer-header">
                     <button class="zoom-to-layer" on:click={() => {zoomToLayer(layerLookup['saturday'].layer)}}>{layerLookup['saturday'].displayName}</button>
-                    <button on:click={() => {openModal(layerLookup['saturday'].displayName, layerLookup['saturday'].description)}}>INFO</button>
+                    <button on:click={() => {zoomToLayer(layerLookup['saturday'].layer)}}>ZOOM</button>
+                    <button on:click={() => {openModal(layerLookup['saturday'].displayName, layerLookup['saturday'].description)}}>MORE INFO</button>
                 </div>
                 {#if layerLookup['saturday'].isVisible}
                 <div class="layer-item-list">
@@ -492,16 +494,17 @@
                 {/if}
             </div>
             {/if}
-            {#if layerLookup['extra']}
+            {#if layerLookup['general']}
             <div class=layer-section>
                 <div class="layer-header">
-                    <button class="zoom-to-layer" on:click={() => {zoomToLayer(layerLookup['extra'].layer)}}>{layerLookup['extra'].displayName}</button>
-                    <button on:click={() => {openModal(layerLookup['extra'].displayName, layerLookup['extra'].description)}}>INFO</button>
+                    <button class="zoom-to-layer" on:click={() => {zoomToLayer(layerLookup['general'].layer)}}>{layerLookup['general'].displayName}</button>
+                    <button on:click={() => {zoomToLayer(layerLookup['general'].layer)}}>ZOOM</button>
+                    <button on:click={() => {openModal(layerLookup['general'].displayName, layerLookup['general'].description)}}>MORE INFO</button>
                 </div>
-                {#if layerLookup['extra'].isVisible}
+                {#if layerLookup['general'].isVisible}
                 <div class="layer-item-list">
                     <ul>
-                        {#each layerLookup['extra'].featureList as f}
+                        {#each layerLookup['general'].featureList as f}
                         <li>
                             <button class="zoom-to" on:click={() => {zoomAndPopup(f)}}><strong>{f.name}</strong></button>
                         </li>
@@ -511,16 +514,37 @@
                 {/if}
             </div>
             {/if}
-            {#if layerLookup['annotation']}
+            {#if layerLookup['recs']}
             <div class=layer-section>
                 <div class="layer-header">
-                    <button class="zoom-to-layer" on:click={() => {zoomToLayer(layerLookup['annotation'].layer)}}>{layerLookup['annotation'].displayName}</button>
-                    <button on:click={() => {openModal(layerLookup['annotation'].displayName, layerLookup['annotation'].description)}}>INFO</button>
+                    <button class="zoom-to-layer" on:click={() => {zoomToLayer(layerLookup['recs'].layer)}}>{layerLookup['recs'].displayName}</button>
+                    <button on:click={() => {zoomToLayer(layerLookup['recs'].layer)}}>ZOOM</button>
+                    <button on:click={() => {openModal(layerLookup['recs'].displayName, layerLookup['recs'].description)}}>MORE INFO</button>
                 </div>
-                {#if layerLookup['annotation'].isVisible}
+                {#if layerLookup['recs'].isVisible}
                 <div class="layer-item-list">
                     <ul>
-                        {#each layerLookup['annotation'].featureList as f}
+                        {#each layerLookup['recs'].featureList as f}
+                        <li>
+                            <button class="zoom-to" on:click={() => {zoomAndPopup(f)}}><strong>{f.name}</strong></button>
+                        </li>
+                        {/each}
+                    </ul>
+                </div>
+                {/if}
+            </div>
+            {/if}
+            {#if layerLookup['easter']}
+            <div class=layer-section>
+                <div class="layer-header">
+                    <button class="zoom-to-layer" on:click={() => {zoomToLayer(layerLookup['easter'].layer)}}>{layerLookup['easter'].displayName}</button>
+                    <button on:click={() => {zoomToLayer(layerLookup['easter'].layer)}}>ZOOM</button>
+                    <button on:click={() => {openModal(layerLookup['easter'].displayName, layerLookup['easter'].description)}}>MORE INFO</button>
+                </div>
+                {#if layerLookup['easter'].isVisible}
+                <div class="layer-item-list">
+                    <ul>
+                        {#each layerLookup['easter'].featureList as f}
                         <li>
                             <button class="zoom-to" on:click={() => {zoomAndPopup(f)}}><strong>{f.name}</strong></button>
                         </li>
