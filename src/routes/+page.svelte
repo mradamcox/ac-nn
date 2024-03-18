@@ -8,7 +8,7 @@
 
     import Map from 'ol/Map';
     import View from 'ol/View';
-    import {getCenter} from 'ol/extent';
+    import {getBottomLeft, getCenter} from 'ol/extent';
     import Feature from 'ol/Feature';
     import {
         Circle,
@@ -417,7 +417,9 @@
                 animation: {
                     duration: 100
                 }
-            }
+            },
+            positioning: "bottom",
+            offsetBox: [20, -20],
         });
         await initMap()
         mapEl = document.getElementById("map");
@@ -574,7 +576,6 @@
         right: .5em;
         width: 35px;
         height: 1.5em;
-        text-align: center;
         z-index: 1000;
     }
 
