@@ -33,6 +33,7 @@
     import Point from 'ol/geom/Point.js';
     import {fromLonLat, toLonLat} from 'ol/proj.js';
     import {containsCoordinate, extend} from 'ol/extent';
+    import { construct_svelte_component } from 'svelte/internal';
 
     const spreadsheetId = env.PUBLIC_GOOGLE_SHEET_ID;
     const googleApiKey = env.PUBLIC_GOOGLE_API_KEY;
@@ -44,11 +45,19 @@
     let layerBtnLabel;
     $: showLayerPanel ? layerBtnLabel = "×" : layerBtnLabel = "i"
 
+    let modalHeader = "...";
+    let modalContent = "...";
+    function openModal(header, content) {
+        modalHeader = header;
+        modalContent = content;
+        showAboutPanel = true;
+    }
+
     function getStyle(feature, resolution) {
         const props = feature.getProperties()
 
         const mainRed = '#ff5a34';
-        const darkRed = 'rgb(123, 30, 39)'
+        const darkRed = 'rgba(123, 30, 39, .5)'
         const teal = 'rgb(16, 196, 162)'
         const fill = new Fill({
             color: 'rgba(255,255,255,0.4)',
@@ -57,6 +66,7 @@
             color: teal,
             width: 1.75,
         });
+        console.log("getting style")
         console.log(props)
         if (props.styleId === "redstar") {
             return new Style({
@@ -101,18 +111,29 @@
             return new Style({
                 stroke: new Stroke({
                     color: darkRed,
-                    width: 2,
+                    width: 3,
                 }),
             })
         } else {
             return new Style({
                 image: new Circle({
-                    fill: fill,
+                    fill: new Fill({
+                        color: 'rgba(50,50,255)',
+                    }),
                     stroke: stroke,
                     radius: 5,
                 }),
-                fill: fill,
-                stroke: stroke,
+                // fill: fill,
+                // stroke: stroke,
+                text: new Text({
+                    text: props.name,
+                    offsetY: -12,
+                    font: "bold 12px sans-serif",
+                    stroke: new Stroke({
+                        color: "white",
+                        width: 2,
+                    }),
+                })
             })
         }
     }
@@ -126,6 +147,8 @@
                 result.values.forEach( function (row) {
                     config[row[0]] = row[1]
                 });
+                modalHeader = config.infoBoxHeader;
+                modalContent = config.infoBoxContent;
             })
             .catch(error => {
                 console.error("hmmmmm, what's wrong??:", error);
@@ -133,7 +156,7 @@
         }
     getConfig()
         
-    const layerLookup = {}
+    const layerList = [];
     async function getLayerList() {
         const url = apiUrl + spreadsheetId + "/values/LayerList?key=" + googleApiKey
         return fetch(url)
@@ -143,20 +166,22 @@
                 result.values.forEach( function (row) {
                     const [id, name, desc, isActive, isVisible, isTogglable, isAnnotation, styleId, zIndex] = row
                     if (id && isActive === "TRUE") {
-                        layerLookup[id] = {
+                        const layer = new VectorLayer({
+                            source: new VectorSource(),
+                            style: getStyle,
+                            zIndex: zIndex ? zIndex : 10,
+                        })
+                        layerList.push({
                             id: id,
                             displayName: name,
                             description: desc,
                             isVisible: isVisible === "TRUE",
                             isAnnotation: isAnnotation === "TRUE",
-                            layer: new VectorLayer({
-                                source: new VectorSource(),
-                                style: getStyle,
-                                zIndex: zIndex ? zIndex : 10,
-                            }),
+                            layer: layer,
                             featureList: [],
                             styleId: styleId,
-                        }
+                            extent: layer.getSource().extent,
+                        })
                         // if (styleId in styles) {
                         //     layerLookup[id].layer.setStyle(styles[styleId])
                         // }
@@ -166,7 +191,7 @@
             .catch(error => {
                 console.error("hmmmmm, what's wrong??:", error);
             })
-    }
+        }
     $: {
         Object.keys(layerLookup).forEach( function (layerId) {
             if (layerLookup[layerId].isTogglable) {
@@ -175,35 +200,43 @@
         })
     }
 
+    const layerLookup = {}
+    let panelList = [];
     async function makeLayers() {
-        Object.keys(layerLookup).forEach ( function (layerId) {
-            const url = apiUrl + spreadsheetId + "/values/" + layerId + "?key=" + googleApiKey
+        const localList = [];
+        layerList.forEach ( function (layerDef) {
+            const url = apiUrl + spreadsheetId + "/values/" + layerDef.id + "?key=" + googleApiKey
             return fetch(url)
-                .then(response => response.json())
-                .then(result => {
-                    const headers = result.values.shift();
-                    result.values.forEach( function (row) {
-                        const [wkt, name, desc, imgUrl, styleId] = row
-                        const feature = new WKT().readFeature(wkt, {
-                            dataProjection: 'EPSG:4326',
-                            featureProjection: 'EPSG:3857',
-                        })
-                        const props = {
-                            name:name,
-                            desc:desc,
-                            imgUrl:imgUrl,
-                            extent: feature.getGeometry().getExtent(),
-                            styleId: styleId ? styleId : layerLookup[layerId].styleId,
-                        }
-                        feature.setProperties(props)
-                        layerLookup[layerId].layer.getSource().addFeature(feature)
-                        layerLookup[layerId].featureList.push(props)
+            .then(response => response.json())
+            .then(result => {
+                const headers = result.values.shift();
+                result.values.forEach( function (row) {
+                    const [wkt, name, desc, imgUrl, styleId] = row
+                    const feature = new WKT().readFeature(wkt, {
+                        dataProjection: 'EPSG:4326',
+                        featureProjection: 'EPSG:3857',
                     })
+                    const props = {
+                        name:name,
+                        desc:desc,
+                        imgUrl:imgUrl,
+                        extent: feature.getGeometry().getExtent(),
+                        styleId: styleId ? styleId : layerDef.styleId,
+                    }
+                    feature.setProperties(props)
+                    layerDef.layer.getSource().addFeature(feature)
+                    layerDef.featureList.push(props)
                 })
-                .catch(error => {
-                    console.error("hmmmmm, what's wrong??:", error);
-                })
+                layerLookup[layerDef.id] = layerDef
+                localList.push(layerDef)
+                // sortedLayers = Object.entries(layerLookup).map(a => layerLookup[a]);
+            })
+            .catch(error => {
+                console.error("hmmmmm, what's wrong??:", error);
+            })
         })
+        console.log(localList)
+        panelList = localList
     }
 
     const mbk = env.PUBLIC_MAPBOX_TOKEN
@@ -301,6 +334,10 @@
         popup.show(coords, popContent);
     }
 
+    function zoomToLayer(layer) {
+        map.getView().fit(layer.getSource().getExtent(), {padding:[150,150,150,150], duration:1000})
+    }
+
     let map;
     let popup;
     async function initMap() {
@@ -319,9 +356,12 @@
         // setBasemap(map, 'mbOutdoors')
         await getLayerList();
         await makeLayers();
+        console.log("adsf")
+        console.log(panelList)
 
-        Object.keys(layerLookup).forEach( function (layerId) {
-            map.addLayer(layerLookup[layerId].layer)
+        // Object.keys(layerLookup).forEach( function (layerId) {
+        layerList.forEach( function (layerDef) {
+            map.addLayer(layerDef.layer)
         })
         // const fullExtent = layerLookup['saturday'].layer.getSource().getExtent();
         // extend(fullExtent, sponsorLayer.getSource().getExtent())
@@ -360,6 +400,7 @@
         }
     }
 
+    
     onMount(async () => {
         
         // Tried a lot of different methods for creating a popup, ended
@@ -380,14 +421,16 @@
         });
         await initMap()
         mapEl = document.getElementById("map");
+        // document.getElementById('modal-bg').onclick(() => {showAboutPanel=false});
     });
 
 </script>
 {#if showAboutPanel}
-<div class="about-modal-bg">
-    <div class="about-modal-content">
-        <h1>{config.infoBoxHeader ? config.infoBoxHeader : '...'}</h1>
-        <p>{@html config.infoBoxContent ? config.infoBoxContent : '...'}</p>
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<div id="modal-bg" on:click={() => {showAboutPanel=false}} class="about-modal-bg">
+    <div class="about-modal-content" on:click={{}}>
+        <h1>{modalHeader}</h1>
+        <p>{@html modalContent}</p>
         <button on:click={() => {showAboutPanel=false}}>close</button>
     </div>
 </div>
@@ -396,11 +439,10 @@
     {#if showLayerPanel}
     <div id="layer-panel">
         <div class="logo-header">
-            <h1 hidden=true>AC / NN</h1>
-            <img class="logo-img" src="/image.png" alt="ac+nn"/>   
+            <h1 style="font-size:3em;">AC💍NN</h1> 
         </div>
         <div class="layer-section" style="margin-bottom: 15px;">
-            <button on:click={() => {showAboutPanel=true}}>{config.infoBoxLabel ? config.infoBoxLabel : 'loading...'}</button>
+            <button on:click={() => {openModal(config.infoBoxHeader, config.infoBoxContent)}}>{config.infoBoxLabel ? config.infoBoxLabel : 'loading...'}</button>
         </div>
         <div>
             <!-- <p>Basemap testing
@@ -410,15 +452,16 @@
             </p> -->
         </div>
         <div class="panel-content">
-            {#each Object.entries(layerLookup) as [layerId, layerDef]}
-            {#if layerDef.isAnnotation != true}
+            {#if layerLookup['friday']}
             <div class=layer-section>
-                <div><button class="layer-header" on:click={() => {layerDef.isVisible=!layerDef.isVisible}}>{layerDef.displayName} {@html layerDef.isVisible ? '&blacktriangledown;' : '&blacktriangleright;'}</button></div>
-                {#if layerDef.isVisible}
-                <div class="layer-description">{layerDef.description}</div>
+                <div class="layer-header">
+                    <button class="zoom-to-layer" on:click={() => {zoomToLayer(layerLookup['friday'].layer)}}>{layerLookup['friday'].displayName}</button>
+                    <button on:click={() => {openModal(layerLookup['friday'].displayName, layerLookup['friday'].description)}}>INFO</button>
+                </div>
+                {#if layerLookup['friday'].isVisible}
                 <div class="layer-item-list">
                     <ul>
-                        {#each layerDef.featureList as f}
+                        {#each layerLookup['friday'].featureList as f}
                         <li>
                             <button class="zoom-to" on:click={() => {zoomAndPopup(f)}}><strong>{f.name}</strong></button>
                         </li>
@@ -428,7 +471,65 @@
                 {/if}
             </div>
             {/if}
-            {/each}
+            {#if layerLookup['saturday']}
+            <div class=layer-section>
+                <div class="layer-header">
+                    <button class="zoom-to-layer" on:click={() => {zoomToLayer(layerLookup['saturday'].layer)}}>{layerLookup['saturday'].displayName}</button>
+                    <button on:click={() => {openModal(layerLookup['saturday'].displayName, layerLookup['saturday'].description)}}>INFO</button>
+                </div>
+                {#if layerLookup['saturday'].isVisible}
+                <div class="layer-item-list">
+                    <ul>
+                        {#each layerLookup['saturday'].featureList as f}
+                        {#if f.name}
+                        <li>
+                            <button class="zoom-to" on:click={() => {zoomAndPopup(f)}}><strong>{f.name}</strong></button>
+                        </li>
+                        {/if}
+                        {/each}
+                    </ul>
+                </div>
+                {/if}
+            </div>
+            {/if}
+            {#if layerLookup['extra']}
+            <div class=layer-section>
+                <div class="layer-header">
+                    <button class="zoom-to-layer" on:click={() => {zoomToLayer(layerLookup['extra'].layer)}}>{layerLookup['extra'].displayName}</button>
+                    <button on:click={() => {openModal(layerLookup['extra'].displayName, layerLookup['extra'].description)}}>INFO</button>
+                </div>
+                {#if layerLookup['extra'].isVisible}
+                <div class="layer-item-list">
+                    <ul>
+                        {#each layerLookup['extra'].featureList as f}
+                        <li>
+                            <button class="zoom-to" on:click={() => {zoomAndPopup(f)}}><strong>{f.name}</strong></button>
+                        </li>
+                        {/each}
+                    </ul>
+                </div>
+                {/if}
+            </div>
+            {/if}
+            {#if layerLookup['annotation']}
+            <div class=layer-section>
+                <div class="layer-header">
+                    <button class="zoom-to-layer" on:click={() => {zoomToLayer(layerLookup['annotation'].layer)}}>{layerLookup['annotation'].displayName}</button>
+                    <button on:click={() => {openModal(layerLookup['annotation'].displayName, layerLookup['annotation'].description)}}>INFO</button>
+                </div>
+                {#if layerLookup['annotation'].isVisible}
+                <div class="layer-item-list">
+                    <ul>
+                        {#each layerLookup['annotation'].featureList as f}
+                        <li>
+                            <button class="zoom-to" on:click={() => {zoomAndPopup(f)}}><strong>{f.name}</strong></button>
+                        </li>
+                        {/each}
+                    </ul>
+                </div>
+                {/if}
+            </div>
+            {/if}
         </div>
     </div>
     {/if}
@@ -483,19 +584,11 @@
     }
 
     .logo-header {
-        padding: 10px;
-    }
-
-    .logo-img {
-        max-width: 100%;
+        text-align: center;
     }
 
     .layer-section {
         margin-bottom: 5px;
-    }
-
-    .layer-description {
-        padding: 5px;
     }
 
     .layer-item-list {
@@ -506,19 +599,21 @@
         list-style: none;
         padding-left: 0px;
     }
-    
-    .panel-content button {
-        border: none;
-        background: none;
-        text-align: left;
-        cursor: pointer;
-    }
 
-    .panel-content button.layer-header {
+    .layer-header {
         border: none;
         background: rgb(61, 64, 143);
         color: rgb(232, 222, 210);
         font-size: 1.25em;
+        width: 100%;
+        padding: 5px;
+        text-align: center;
+    }
+    .layer-header button.zoom-to-layer {
+        border: none;
+        background: rgb(61, 64, 143);
+        color: rgb(232, 222, 210);
+        font-size: 1em;
         width: 100%;
         padding: 5px;
         text-align: center;
@@ -555,7 +650,6 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        text-align: center;
         border-radius: 4px;
         border: 2px solid #494583;
     }
