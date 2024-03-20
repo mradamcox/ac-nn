@@ -66,8 +66,6 @@
             color: teal,
             width: 1.75,
         });
-        console.log("getting style")
-        console.log(props)
         if (props.styleId === "redstar") {
             return new Style({
                 image: new RegularShape({
@@ -235,7 +233,6 @@
                 console.error("hmmmmm, what's wrong??:", error);
             })
         })
-        console.log(localList)
         panelList = localList
     }
 
@@ -323,9 +320,8 @@
     function handlePopup (featureProps) {
         let popContent = `<h2>${featureProps.name}</h2>`
         if (featureProps.imgUrl) { popContent+= `<img src=${featureProps.imgUrl} style="width:100%" />`}
-        popContent+= `<p><em>${featureProps.desc}</em></p>`
+        if (featureProps.desc) { popContent+= `<p><em>${featureProps.desc}</em></p>`}
         const coords = getCenter(featureProps.extent)
-        console.log(coords)
         const coords84 = toLonLat(coords)
         const latLonStr = `${coords84[1]},${coords84[0]}`
         popContent = popContent + `<p>
@@ -356,8 +352,6 @@
         // setBasemap(map, 'mbOutdoors')
         await getLayerList();
         await makeLayers();
-        console.log("adsf")
-        console.log(panelList)
 
         // Object.keys(layerLookup).forEach( function (layerId) {
         layerList.forEach( function (layerDef) {
